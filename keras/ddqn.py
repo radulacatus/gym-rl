@@ -24,15 +24,30 @@ parser.add_argument('--training_steps', type=int, default=10)
 parser.add_argument('--target_replace_freq', type=int, default=10)
 parser.add_argument('--activation_function', type=str ,default='relu') # tanh
 parser.add_argument('--environment', type=str ,default='CartPole-v0') # MountainCar-v0
-parser.add_argument('--mode', choices=['train', 'simulate'], default='train')
+parser.add_argument('--mode', choices=['train', 'simulate','train_continue'], default='train')
 parser.add_argument('--model_file', type=str ,default=None)
 args = parser.parse_args()
 
 base_folder = '../local/'
-best_weights = []
-hidden_layer_sizes = [8,4]
+hidden_layer_sizes = [100, 100]
 
-def create_net(hidden_layer_sizes, env):
+best_weights = []
+max_score = 0
+
+def save_weights():
+    global best_weights
+    global max_score
+    np.savez(base_folder + args.model_file, max_score=max_score, best_weights=best_weights)
+
+def load_weights():
+    global best_weights
+    global max_score
+    saved = np.load(base_folder + args.model_file + '.npz')
+    max_score = saved['max_score']
+    best_weights = saved['best_weights']
+
+def create_net(hidden_layer_sizes, env, use_saved_weights = False):
+    global best_weights
     i = Input(shape=env.observation_space.shape)
     h = BatchNormalization()(i)
     for index, layer_size in enumerate(hidden_layer_sizes):
@@ -41,22 +56,28 @@ def create_net(hidden_layer_sizes, env):
             h = BatchNormalization()(h)
     h = Dense(env.action_space.n + 1)(h)
     o = Lambda(lambda a: K.expand_dims(a[:,0], dim=-1) + a[:,1:] - K.max(a[:, 1:], keepdims=True), output_shape=(env.action_space.n,))(h)
-    return i, o
+    model = Model(input=i, output=o)
+    if use_saved_weights == True:
+        model.set_weights(best_weights)
+    
+    return model
 
-def train():
+def train(load_from_file = False):
     global best_weights
+    global max_score
+
+    if load_from_file:
+        load_weights()
+
     env = gym.make(args.environment)
 
-    i, o = create_net(hidden_layer_sizes, env)
-    theta = Model(input=i, output=o)
+    theta = create_net(hidden_layer_sizes, env, load_from_file)
     theta.compile(optimizer='adam', loss='mse')
 
-    i, o = create_net(hidden_layer_sizes, env)
-    theta_bar = Model(input=i, output=o)
+    theta_bar = create_net(hidden_layer_sizes, env)
     theta_bar.set_weights(theta.get_weights())
 
     memory = []
-    max_score = 0
 
     for ep in range(args.nr_episodes):
         obs = env.reset()
@@ -113,15 +134,12 @@ def train():
         if ep % 1 == 0:
             print "Episode {} score: {}".format(ep, score)
             # print "random hits: {} total memory frames: {}".format(random_hits, len(memory))
+    save_weights()
 
 def simulate():
     env = gym.make(args.environment)
-
-    best_weights = np.load(base_folder + args.model_file + '.npy')
-
-    i, o = create_net(hidden_layer_sizes, env)
-    theta = Model(input=i, output=o)
-    theta.set_weights(best_weights)
+    load_weights()
+    theta = create_net(hidden_layer_sizes, env, True)
     
     obs = env.reset()
     while True:
@@ -132,13 +150,16 @@ def simulate():
             print 'done:', reward
             break
 
-def save_best_weights():
-    np.save(base_folder + args.model_file, best_weights)
-
 if __name__ == "__main__":
-    if args.mode == 'train':
-        atexit.register(save_best_weights)
-        train()
+    load_from_file = False
+    if args.mode == 'train_continue':
+        assert len(args.model_file) > 0, "Provide a model file to continue training"
+        load_from_file = True
+
+    if args.mode == 'train' or args.mode == 'train_continue':
+        atexit.register(save_weights)
+        train(load_from_file)
+    
     if args.mode == 'simulate':
         assert len(args.model_file) > 0, "Provide a model file to simulate"
         simulate()
