@@ -82,8 +82,10 @@ class DeepQlearnerBuilder:
         shape = [size_of_space(self.env.observation_space)] + self.hidden_layer_sizes + [size_of_space(self.env.action_space)]
         return NeuralNetwork(shape, self.network_hyperparams, self.cost_function)
 
-    def build_qlearner(self):
+    def build_qlearner(self, model_filename = None):
         nn = self.build_network()
+        if model_filename != None:
+            nn.load(model_filename)
         action_space_size = size_of_space(self.env.action_space)
         return GymQLearner(nn, self.env, action_space_size, self.learner_hyperparams, self.ql_opt)
 
