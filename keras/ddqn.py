@@ -12,13 +12,13 @@ from keras.models import Model
 from keras.optimizers import Adam, SGD, Nadam
 
 # Init environment
-game = "MountainCar-v0"
-#game = "CartPole-v0"
+#game = "MountainCar-v0"
+game = "CartPole-v0"
 env = gym.make(game)
 
 # Hyperparams
-epsilon = 0.999 #random chance
-epsilon_decay = 0.999 #random chance decay
+epsilon = 0.99 #random chance
+epsilon_decay = 0.99 #random chance decay
 learning_rate = 0.005
 gamma = 0.99 #discount factor
 M = 3000 #number of episodes
@@ -28,26 +28,21 @@ Nr = 500 #replay buffer max size
 # Nmb = 50 #min size the buffer must have to train
 N_bar = 10 #number of steps before updating the target optimizer
 Mt = 20 #number of training steps for the optimizer
-
-# Other options
-# np.set_printoptions(precision=2)
 activation_function='tanh' # 'relu'
 
 
 def create_net(hidden_layer_sizes):
     i = Input(shape=env.observation_space.shape)
     h = BatchNormalization()(i)
-    # for layer_size, index in enumerate(hidden_layer_sizes):
-    #     h = Dense(layer_size, activation=activation_function)(h)
-    #     if index != len(hidden_layer_sizes) - 1:
-    #         h = BatchNormalization()(h)
-    h = Dense(100, activation=activation_function)(h)
-    h = BatchNormalization()(h)
+    for index, layer_size in enumerate(hidden_layer_sizes):
+        h = Dense(layer_size, activation=activation_function)(h)
+        if index != len(hidden_layer_sizes) - 1:
+            h = BatchNormalization()(h)
     h = Dense(env.action_space.n + 1)(h)
     o = Lambda(lambda a: K.expand_dims(a[:,0], dim=-1) + a[:,1:] - K.max(a[:, 1:], keepdims=True), output_shape=(env.action_space.n,))(h)
     return i, o
 
-hidden_layer_sizes = [100]
+hidden_layer_sizes = [50,10]
 
 i, o = create_net(hidden_layer_sizes)
 theta = Model(input=i, output=o)
@@ -56,9 +51,6 @@ theta.compile(optimizer='adam', loss='mse')
 i, o = create_net(hidden_layer_sizes)
 theta_bar = Model(input=i, output=o)
 theta_bar.set_weights(theta.get_weights())
-
-# model = Model(input=[i1,i2], output=[o1,o2])
-# model.compile(optimizer='adam', loss='mse')
 
 memory = []
 
@@ -93,15 +85,11 @@ for ep in range(M):
             obs_list = np.array([r[0] for r in selection])
             newobs_list = np.array([r[3] for r in selection])
             target_q = theta.predict(obs_list)
-            # next_action = np.argmax(theta.predict(newobs_list),axis=1)
-            # next_q_value = theta_bar.predict(newobs_list)
-            # next_q_value = np.max(theta.predict(newobs_list),axis=1)
             next_q_values = theta_bar.predict(newobs_list)
             for i, run in enumerate(selection):
                 _, a, r, _, d = run
                 target_q[i, a] = r
                 if not d:
-                    # target_q[i,a] += gamma * next_q_value[i, next_action[i]]
                     target_q[i,a] += gamma * next_q_values[i,a]
             theta.train_on_batch(obs_list, target_q)
 
