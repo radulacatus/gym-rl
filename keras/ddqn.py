@@ -29,7 +29,7 @@ parser.add_argument('--model_file', type=str ,default=None)
 args = parser.parse_args()
 
 base_folder = '../local/'
-hidden_layer_sizes = [100, 100]
+hidden_layer_sizes = [100]
 
 best_weights = []
 max_score = 0
@@ -42,6 +42,7 @@ def save_weights():
 def load_weights():
     global best_weights
     global max_score
+    
     saved = np.load(base_folder + args.model_file + '.npz')
     max_score = saved['max_score']
     best_weights = saved['best_weights']
