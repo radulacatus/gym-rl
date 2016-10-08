@@ -26,6 +26,7 @@ parser.add_argument('--activation_function', type=str ,default='relu') # tanh
 parser.add_argument('--environment', type=str ,default='CartPole-v0') # MountainCar-v0
 parser.add_argument('--mode', choices=['train', 'simulate','train_continue'], default='train')
 parser.add_argument('--model_file', type=str ,default=None)
+parser.add_argument('--log', action='store_true')
 args = parser.parse_args()
 
 base_folder = '../local/'
@@ -33,6 +34,34 @@ hidden_layer_sizes = [100]
 
 best_weights = []
 max_score = 0
+
+logger = None
+if args.log:
+    from qlogging import qlogger
+    logger = qlogger()
+
+#logTypes:
+SCORE = 1
+RANDOM_HITS = 2
+def log(logType, val, ep, ts = -1):
+    if args.log == False:
+        return
+
+    if logType == SCORE:
+        logger.log_score(val, ep)
+
+    if logType == RANDOM_HITS:
+        logger.log_random_hits(val, ep, ts)
+
+def before_train():
+    if args.log:
+        logger.start_experiment(vars(args), "-", "name and description will be specified through command line arguments")
+
+def after_train():
+    save_weights()
+    print "max score: " + str(max_score) 
+    if args.log:
+        logger.end_experiment()    
 
 def save_weights():
     global best_weights
@@ -119,6 +148,7 @@ def train(load_from_file = False):
                         target_q[i, a] += args.discount_factor * next_q_values[i,a]
                 theta.train_on_batch(obs_list, target_q)
 
+            log(RANDOM_HITS,random_hits, ep, t)
             if done:
                 break
             
@@ -134,7 +164,7 @@ def train(load_from_file = False):
 
         if ep % 1 == 0:
             print "Episode {} score: {}".format(ep, score)
-            # print "random hits: {} total memory frames: {}".format(random_hits, len(memory))
+            log(SCORE, score, ep)
     save_weights()
 
 def simulate():
@@ -158,7 +188,8 @@ if __name__ == "__main__":
         load_from_file = True
 
     if args.mode == 'train' or args.mode == 'train_continue':
-        atexit.register(save_weights)
+        atexit.register(after_train)
+        before_train()
         train(load_from_file)
     
     if args.mode == 'simulate':
