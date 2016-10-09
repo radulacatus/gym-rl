@@ -7,23 +7,37 @@ class qlogger(object):
     def __init__(self, dbName = "experimentsDb"):
         self.mongoClient = MongoClient('localhost:27017')
         self.db = self.mongoClient.db[dbName]
+        self.init_properties()
+
+    def init_properties(self):
         self.currentExperimentId = None
+        self.score = series('scores')
+        self.random_hits = series('random_hits')
+        self.errors = []
+        self.comments = []
 
     def start_experiment(self, params, name = None, desc = None):
         timestamp = datetime.datetime.now()
         self.currentExperimentId = self.db.experiments.insert({'startTime': timestamp, 'params': params, 'name': name, 'desc': desc })
-        self.score = series('scores')
-        self.random_hits = series('random_hits')
+
+    def log_error(self, errorMessage):
+        self.errors.append(errorMessage)
+
+    def log_comment(self, message):
+        self.comments.append(message)
 
     def end_experiment(self):
         timestamp = datetime.datetime.now()
         self.save_series(self.score)
         self.save_series(self.random_hits)
-        self.db.experiments.update_one({'_id': self.currentExperimentId}, {'$set': {'endTime': timestamp}}, upsert=True)
+        self.db.experiments.update_one({'_id': self.currentExperimentId}, {'$set': 
+        {
+            'endTime': timestamp,
+            'errors': self.errors,
+            'comments': self.comments
+        }}, upsert=True)
         rez = self.currentExperimentId
-        self.currentExperimentId = None
-        self.score = series('scores')
-        self.random_hits = series('random_hits')
+        self.init_properties()
         return rez
 
     def save_series(self, series):

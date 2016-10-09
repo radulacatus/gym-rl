@@ -3,6 +3,7 @@ import argparse
 import gym
 import numpy as np
 import random
+import sys
 
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
@@ -27,6 +28,7 @@ parser.add_argument('--environment', type=str ,default='CartPole-v0') # Mountain
 parser.add_argument('--mode', choices=['train', 'simulate','train_continue'], default='train')
 parser.add_argument('--model_file', type=str ,default=None)
 parser.add_argument('--log', action='store_true')
+parser.add_argument('--print_to_console', action='store_true')
 args = parser.parse_args()
 
 base_folder = '../local/'
@@ -53,13 +55,21 @@ def log(logType, val, ep, ts = -1):
     if logType == RANDOM_HITS:
         logger.log_random_hits(val, ep, ts)
 
+def log_error(errorMessage):
+    if args.log:
+        logger.log_error(errorMessage)
+
+def cprint(string):
+    if args.print_to_console:
+        print string
+
 def before_train():
     if args.log:
         logger.start_experiment(vars(args), "-", "name and description will be specified through command line arguments")
 
 def after_train():
     save_weights()
-    print "max score: " + str(max_score) 
+    cprint("max score: " + str(max_score)) 
     if args.log:
         logger.end_experiment()    
 
@@ -155,7 +165,7 @@ def train(load_from_file = False):
         if score >= max_score:
             max_score = score
             best_weights = theta.get_weights()
-            print 'save for score ' + str(score)
+            cprint('save for score ' + str(score))
 
         if ep % args.target_replace_freq == 0:
             theta_bar.set_weights(theta.get_weights())
@@ -163,11 +173,13 @@ def train(load_from_file = False):
         args.random_chance *= args.random_decay
 
         if ep % 1 == 0:
-            print "Episode {} score: {}".format(ep, score)
+            cprint("Episode {} score: {}".format(ep, score))
             log(SCORE, score, ep)
     save_weights()
 
 def simulate():
+    assert len(args.model_file) > 0, "Provide a model file to simulate"
+
     env = gym.make(args.environment)
     load_weights()
     theta = create_net(hidden_layer_sizes, env, True)
@@ -178,10 +190,13 @@ def simulate():
         action = np.argmax(theta.predict(np.array([obs])))
         obs, reward, done, info = env.step(action)
         if done:
-            print 'done:', reward
+            cprint('done:' + str(reward))
             break
 
 if __name__ == "__main__":
+    if args.mode == 'simulate':
+        simulate()
+    
     load_from_file = False
     if args.mode == 'train_continue':
         assert len(args.model_file) > 0, "Provide a model file to continue training"
@@ -189,9 +204,9 @@ if __name__ == "__main__":
 
     if args.mode == 'train' or args.mode == 'train_continue':
         atexit.register(after_train)
-        before_train()
-        train(load_from_file)
-    
-    if args.mode == 'simulate':
-        assert len(args.model_file) > 0, "Provide a model file to simulate"
-        simulate()
+        try:
+            before_train()
+            train(load_from_file)
+        except:
+            log_error(sys.exc_info()[0])
+            raise
