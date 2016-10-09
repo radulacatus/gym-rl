@@ -29,10 +29,11 @@ parser.add_argument('--mode', choices=['train', 'simulate','train_continue'], de
 parser.add_argument('--model_file', type=str ,default=None)
 parser.add_argument('--log', action='store_true')
 parser.add_argument('--print_to_console', action='store_true')
+parser.add_argument('--hidden_layer_sizes', nargs='+', type=int, default=[100])
 args = parser.parse_args()
 
 base_folder = '../local/'
-hidden_layer_sizes = [100]
+hidden_layer_sizes = args.hidden_layer_sizes
 
 best_weights = []
 max_score = 0
